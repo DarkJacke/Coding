@@ -1,0 +1,85 @@
+<Page
+    x:Class="DarkOptimizer.App.Views.ShellPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:DarkOptimizer.App.Controls"
+    xmlns:vm="using:DarkOptimizer.App.ViewModels"
+    mc:Ignorable="d"
+    Background="{ThemeResource AppBackgroundBrush}">
+
+    <Page.Resources>
+        <x:String x:Key="CaptionFont">Bahnschrift SemiBold</x:String>
+    </Page.Resources>
+
+    <Grid x:Name="RootGrid" Padding="24" RowSpacing="14" ColumnSpacing="18">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Padding="14" CornerRadius="18" Background="#32000000" BorderThickness="1" BorderBrush="#3AFFFFFF">
+            <StackPanel Spacing="10">
+                <TextBlock Text="Dark optimizer 2026" FontSize="24" FontFamily="{StaticResource CaptionFont}"/>
+                <TextBlock Text="Native AOT / WinUI / Zero reflection" Opacity="0.75" />
+                <ItemsRepeater ItemsSource="{x:Bind ViewModel.SidebarItems, Mode=OneWay}">
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NavItemViewModel">
+                            <Button HorizontalAlignment="Stretch" Click="OnNavigationClicked" Tag="{x:Bind Route}" Padding="12,8">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <FontIcon Glyph="{x:Bind Glyph}"/>
+                                    <TextBlock Text="{x:Bind Label}"/>
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Column="1" RowSpacing="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                <TextBlock Text="{x:Bind ViewModel.Title, Mode=OneWay}" FontSize="30" FontFamily="{StaticResource CaptionFont}" />
+                <TextBlock VerticalAlignment="Bottom" Text="{x:Bind ViewModel.MemorySummary, Mode=OneWay}" Opacity="0.85" />
+                <Button Content="Refresh" Command="{x:Bind ViewModel.RefreshMemoryCommand}" />
+            </StackPanel>
+
+            <Grid Grid.Row="1" RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <controls:LoadingSkeletonControl x:Load="{x:Bind ViewModel.IsDashboardLoading, Mode=OneWay}" />
+
+                <StackPanel Grid.Row="1" x:Load="{x:Bind ViewModel.IsAdvancedLoaded, Mode=OneWay}" Spacing="12">
+                    <Border CornerRadius="14" Padding="14" Background="#22FFFFFF">
+                        <StackPanel>
+                            <TextBlock Text="Optimization Tiers" FontSize="18" FontFamily="{StaticResource CaptionFont}" />
+                            <TextBlock Text="Simple • Intermediate • Advanced • Supervised" Opacity="0.85" />
+                            <TextBlock Text="Statically registered actions with deterministic ordering for Native AOT." Opacity="0.75" TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+                    </Border>
+                    <Border CornerRadius="14" Padding="14" Background="#22FFFFFF">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Free RAM" FontSize="18" FontFamily="{StaticResource CaptionFont}" />
+                            <TextBlock Text="Working set trim + empty working sets + standby/modified list purge." Opacity="0.85" TextWrapping="WrapWholeWords"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="Run Free RAM" Command="{x:Bind ViewModel.RunFreeRamCommand}" IsEnabled="{x:Bind !ViewModel.IsFreeRamBusy, Mode=OneWay}" />
+                                <ProgressRing IsActive="{x:Bind ViewModel.IsFreeRamBusy, Mode=OneWay}" Width="20" Height="20"/>
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.FreeRamLastResult, Mode=OneWay}" Opacity="0.78" TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

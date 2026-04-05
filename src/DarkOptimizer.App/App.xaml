@@ -1,0 +1,15 @@
+<Application
+    x:Class="DarkOptimizer.App.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DarkOptimizer.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <LinearGradientBrush x:Key="AppBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#151821" Offset="0"/>
+                <GradientStop Color="#10131B" Offset="0.5"/>
+                <GradientStop Color="#0B0E14" Offset="1"/>
+            </LinearGradientBrush>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
