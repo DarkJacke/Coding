@@ -1,9 +1,13 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 
 namespace DarkOptimizer.Core.Optimization;
 
 public sealed class OptimizationService(IOptimizationRegistry registry)
 {
+    private static readonly IReadOnlyDictionary<string, string> EmptyParameters =
+        new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(capacity: 0));
+
     private readonly IOptimizationRegistry _registry = registry;
 
     public async ValueTask<OptimizationResult> RunTierAsync(
@@ -16,7 +20,7 @@ public sealed class OptimizationService(IOptimizationRegistry registry)
         var context = new OptimizationActionContext(
             IsElevated: isElevated,
             StartedAtUtc: DateTimeOffset.UtcNow,
-            Parameters: parameters ?? EmptyParameters.Instance);
+            Parameters: parameters ?? EmptyParameters);
 
         var actions = _registry.GetActions(tier);
         var results = new ActionResult[actions.Length];
@@ -48,10 +52,5 @@ public sealed class OptimizationService(IOptimizationRegistry registry)
             Actions = results,
             TotalDuration = tierStopwatch.Elapsed
         };
-    }
-
-    private sealed class EmptyParameters : Dictionary<string, string>
-    {
-        public static readonly EmptyParameters Instance = [];
     }
 }

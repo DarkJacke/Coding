@@ -32,10 +32,10 @@ public sealed class FreeRamService : IFreeRamService
             DateTimeOffset.UtcNow));
     }
 
-    public ValueTask<FreeRamRunResult> ReduceProcessWorkingSetsAsync(CancellationToken cancellationToken)
+    public async ValueTask<FreeRamRunResult> ReduceProcessWorkingSetsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var before = GetMemorySnapshotAsync(cancellationToken).Result;
+        var before = await GetMemorySnapshotAsync(cancellationToken).ConfigureAwait(false);
         var sw = Stopwatch.StartNew();
 
         var ok = MemoryNativeMethods.SetProcessWorkingSetSizeEx(
@@ -45,76 +45,92 @@ public sealed class FreeRamService : IFreeRamService
             QUOTA_LIMITS_HARDWS_MIN_DISABLE | QUOTA_LIMITS_HARDWS_MAX_DISABLE);
 
         sw.Stop();
-        var after = GetMemorySnapshotAsync(cancellationToken).Result;
+        var after = await GetMemorySnapshotAsync(cancellationToken).ConfigureAwait(false);
         var reclaimed = (long)after.AvailablePhysicalBytes - (long)before.AvailablePhysicalBytes;
 
-        return ValueTask.FromResult(new FreeRamRunResult(
+        return new FreeRamRunResult(
             "ReduceProcessWorkingSets",
             ok,
             reclaimed,
             sw.Elapsed,
-            ok ? "Working set trim invoked." : "SetProcessWorkingSetSizeEx failed."));
+            ok ? "Working set trim invoked." : "SetProcessWorkingSetSizeEx failed.");
     }
 
+    public ValueTask<FreeRamRunResult> EmptyWorkingSetsAsync(CancellationToken cancellationToken)
+        => ExecuteMemoryListCommandAsync(
+            MemoryNativeMethods.SYSTEM_MEMORY_LIST_COMMAND.MemoryEmptyWorkingSets,
+            "EmptyWorkingSets",
+            cancellationToken);
+
     public ValueTask<FreeRamRunResult> PurgeStandbyListAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return ExecuteMemoryListCommand(
+        => ExecuteMemoryListCommandAsync(
             MemoryNativeMethods.SYSTEM_MEMORY_LIST_COMMAND.MemoryPurgeStandbyList,
             "PurgeStandbyList",
             cancellationToken);
-    }
+
+    public ValueTask<FreeRamRunResult> PurgeModifiedPageListAsync(CancellationToken cancellationToken)
+        => ExecuteMemoryListCommandAsync(
+            MemoryNativeMethods.SYSTEM_MEMORY_LIST_COMMAND.MemoryFlushModifiedList,
+            "PurgeModifiedPageList",
+            cancellationToken);
+
+    public ValueTask<FreeRamRunResult> PurgeLowPriorityStandbyListAsync(CancellationToken cancellationToken)
+        => ExecuteMemoryListCommandAsync(
+            MemoryNativeMethods.SYSTEM_MEMORY_LIST_COMMAND.MemoryPurgeLowPriorityStandbyList,
+            "PurgeLowPriorityStandbyList",
+            cancellationToken);
 
     public async ValueTask<FreeRamRunResult> CombinedAggressiveTrimAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var sw = Stopwatch.StartNew();
-        var a = await ReduceProcessWorkingSetsAsync(cancellationToken).ConfigureAwait(false);
-        var b = await ExecuteMemoryListCommand(
-            MemoryNativeMethods.SYSTEM_MEMORY_LIST_COMMAND.MemoryEmptyWorkingSets,
-            "EmptyWorkingSets",
-            cancellationToken).ConfigureAwait(false);
-        var c = await ExecuteMemoryListCommand(
-            MemoryNativeMethods.SYSTEM_MEMORY_LIST_COMMAND.MemoryPurgeLowPriorityStandbyList,
-            "PurgeLowPriorityStandbyList",
-            cancellationToken).ConfigureAwait(false);
+
+        var workingSet = await ReduceProcessWorkingSetsAsync(cancellationToken).ConfigureAwait(false);
+        var emptyWorkingSets = await EmptyWorkingSetsAsync(cancellationToken).ConfigureAwait(false);
+        var standby = await PurgeStandbyListAsync(cancellationToken).ConfigureAwait(false);
+        var modified = await PurgeModifiedPageListAsync(cancellationToken).ConfigureAwait(false);
+        var lowPriority = await PurgeLowPriorityStandbyListAsync(cancellationToken).ConfigureAwait(false);
 
         sw.Stop();
+
         return new FreeRamRunResult(
             "CombinedAggressiveTrim",
-            a.Succeeded && b.Succeeded && c.Succeeded,
-            a.ReclaimedBytes + b.ReclaimedBytes + c.ReclaimedBytes,
+            workingSet.Succeeded && emptyWorkingSets.Succeeded && standby.Succeeded && modified.Succeeded && lowPriority.Succeeded,
+            workingSet.ReclaimedBytes + emptyWorkingSets.ReclaimedBytes + standby.ReclaimedBytes + modified.ReclaimedBytes + lowPriority.ReclaimedBytes,
             sw.Elapsed,
-            $"{a.Message} {b.Message} {c.Message}");
+            $"{workingSet.Message} {emptyWorkingSets.Message} {standby.Message} {modified.Message} {lowPriority.Message}");
     }
 
-    private ValueTask<FreeRamRunResult> ExecuteMemoryListCommand(
+    private async ValueTask<FreeRamRunResult> ExecuteMemoryListCommandAsync(
         MemoryNativeMethods.SYSTEM_MEMORY_LIST_COMMAND command,
         string strategy,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var before = GetMemorySnapshotAsync(cancellationToken).Result;
+        var before = await GetMemorySnapshotAsync(cancellationToken).ConfigureAwait(false);
         var sw = Stopwatch.StartNew();
 
         var value = (int)command;
         var size = (uint)sizeof(int);
+
         unsafe
         {
             var status = MemoryNativeMethods.NtSetSystemInformation(
                 MemoryNativeMethods.SYSTEM_INFORMATION_CLASS.SystemMemoryListInformation,
                 (nint)(&value),
                 size);
+
             sw.Stop();
-            var after = GetMemorySnapshotAsync(cancellationToken).Result;
+
+            var after = await GetMemorySnapshotAsync(cancellationToken).ConfigureAwait(false);
             var reclaimed = (long)after.AvailablePhysicalBytes - (long)before.AvailablePhysicalBytes;
 
-            return ValueTask.FromResult(new FreeRamRunResult(
+            return new FreeRamRunResult(
                 strategy,
                 status == STATUS_SUCCESS,
                 reclaimed,
                 sw.Elapsed,
-                status == STATUS_SUCCESS ? "Command completed." : $"NtSetSystemInformation status: {status}"));
+                status == STATUS_SUCCESS ? "Command completed." : $"NtSetSystemInformation status: {status}");
         }
     }
 }

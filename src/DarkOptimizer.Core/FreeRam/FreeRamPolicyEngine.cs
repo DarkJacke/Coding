@@ -9,13 +9,23 @@ public sealed class FreeRamPolicyEngine(IFreeRamService freeRamService, IPrivile
 
     public async ValueTask<IReadOnlyList<FreeRamRunResult>> ExecuteBestStrategyAsync(CancellationToken cancellationToken)
     {
-        var results = new List<FreeRamRunResult>(capacity: 3);
-        results.Add(await _freeRamService.ReduceProcessWorkingSetsAsync(cancellationToken).ConfigureAwait(false));
-
-        if (_privilegeProvider.IsElevated && _privilegeProvider.HasProfileSingleProcessPrivilege)
+        var results = new List<FreeRamRunResult>(capacity: 5)
         {
-            results.Add(await _freeRamService.PurgeStandbyListAsync(cancellationToken).ConfigureAwait(false));
-            results.Add(await _freeRamService.CombinedAggressiveTrimAsync(cancellationToken).ConfigureAwait(false));
+            await _freeRamService.ReduceProcessWorkingSetsAsync(cancellationToken).ConfigureAwait(false)
+        };
+
+        if (!_privilegeProvider.IsElevated)
+        {
+            return results;
+        }
+
+        results.Add(await _freeRamService.EmptyWorkingSetsAsync(cancellationToken).ConfigureAwait(false));
+        results.Add(await _freeRamService.PurgeStandbyListAsync(cancellationToken).ConfigureAwait(false));
+
+        if (_privilegeProvider.HasProfileSingleProcessPrivilege)
+        {
+            results.Add(await _freeRamService.PurgeModifiedPageListAsync(cancellationToken).ConfigureAwait(false));
+            results.Add(await _freeRamService.PurgeLowPriorityStandbyListAsync(cancellationToken).ConfigureAwait(false));
         }
 
         return results;

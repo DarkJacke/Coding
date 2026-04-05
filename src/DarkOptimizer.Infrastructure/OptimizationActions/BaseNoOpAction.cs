@@ -3,9 +3,9 @@ using System.Diagnostics;
 
 namespace DarkOptimizer.Infrastructure.OptimizationActions;
 
-internal abstract class BaseNoOpAction : IOptimizationAction
+internal abstract class BaseOptimizationAction : IOptimizationAction
 {
-    protected BaseNoOpAction(string id, OptimizationTier tier, bool requiresElevation = false)
+    protected BaseOptimizationAction(string id, OptimizationTier tier, bool requiresElevation = false)
     {
         Id = id;
         Tier = tier;
@@ -20,17 +20,26 @@ internal abstract class BaseNoOpAction : IOptimizationAction
     {
         cancellationToken.ThrowIfCancellationRequested();
         var sw = Stopwatch.StartNew();
-        var delta = ExecuteCore(context);
+        var execution = ExecuteCore(context, cancellationToken);
         sw.Stop();
 
         return ValueTask.FromResult(new ActionResult(
             Id,
-            Succeeded: true,
-            OptimizationErrorCode.None,
-            "Completed",
+            execution.Succeeded,
+            execution.ErrorCode,
+            execution.Message,
             sw.Elapsed,
-            delta));
+            execution.DeltaValue));
     }
 
-    protected abstract long ExecuteCore(OptimizationActionContext context);
+    protected abstract ActionExecution ExecuteCore(OptimizationActionContext context, CancellationToken cancellationToken);
+
+    protected readonly record struct ActionExecution(bool Succeeded, OptimizationErrorCode ErrorCode, string Message, long DeltaValue)
+    {
+        public static ActionExecution Success(string message, long deltaValue)
+            => new(true, OptimizationErrorCode.None, message, deltaValue);
+
+        public static ActionExecution Failure(OptimizationErrorCode errorCode, string message)
+            => new(false, errorCode, message, 0);
+    }
 }

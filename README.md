@@ -1,91 +1,107 @@
-# Dark optimizer 2026
+# DARK OPTIMIZER 2026 ⚡
 
-Optimizador modular para Windows 10/11 orientado a rendimiento extremo, arquitectura no reflectiva y despliegue Native AOT.
+> High-performance Windows 10/11 optimizer built for **Native AOT**, **strict trimming**, and **deterministic execution**.
 
-## Stack principal
+## Why this project
 
-- **UI**: WinUI 3 (Windows App SDK) con Fluent, fondo Mica y sidebar moderna.
-- **Arquitectura**: MVVM con Source Generators (`CommunityToolkit.Mvvm`) + lógica de interacción caliente en code-behind.
-- **Runtime**: `.NET 10` preview, trimming estricto y banderas de compatibilidad AOT.
-- **Módulos**:
-  - Dashboard
-  - Optimization (Simple / Intermediate / Advanced / Supervised)
-  - Free RAM (mecanismos estilo Mem Reduct)
+Dark Optimizer 2026 targets the engineering gap between modern WinUI UX and low-level system tuning. The solution is split for isolation, testability, and predictable startup behavior on `win-x64`.
 
-## Estructura
+- **UI stack**: WinUI 3 (Windows App SDK), Fluent visuals, Mica backdrop, skeleton loading.
+- **Architecture**: MVVM with source generators + code-behind only for hot UI interactions.
+- **Execution model**: static registration, non-reflective pipelines, linker-safe contracts.
+- **Memory module**: Mem Reduct-inspired RAM reduction primitives via Win32/NT interop.
+
+---
+
+## Solution layout
 
 ```text
 DarkOptimizer.sln
-src/
-  DarkOptimizer.App/             # WinUI shell + navegación
-  DarkOptimizer.Core/            # contratos, modelos, motor de políticas
-  DarkOptimizer.Infrastructure/  # interop Win32/NT + registro estático de acciones
-tests/
-  DarkOptimizer.Core.Tests/
+├─ src/
+│  ├─ DarkOptimizer.App/              # WinUI shell, sidebar navigation, skeleton states
+│  ├─ DarkOptimizer.Core/             # contracts, orchestration, policy engines
+│  └─ DarkOptimizer.Infrastructure/   # Win32/NT interop and action implementations
+└─ tests/
+   └─ DarkOptimizer.Core.Tests/       # pipeline and policy tests
 ```
 
-## Diseño de rendimiento
+---
 
-- Todo binding de UI usa **`{x:Bind}`** en la shell.
-- Se difiere contenido pesado con **`x:Load`** (skeleton y paneles avanzados).
-- Registro de acciones de optimización por **arreglos estáticos** (sin reflexión, seguro para trimming).
-- Interop nativo con **`[LibraryImport]`** para minimizar marshalling en runtime.
+## Dashboard architecture (modular)
 
-## Módulo Optimization
+### Shell UX
 
-El motor ejecuta acciones por `OptimizationTier`:
+- Left navigation sidebar with strongly-typed items and `{x:Bind}` everywhere.
+- Deferred heavy panels using `x:Load` to reduce memory at startup.
+- Async skeleton placeholders while telemetry/memory sections initialize.
+- Fast code-behind route switching (`ShellPage.xaml.cs`) to avoid extra allocations.
 
-1. **Simple**: limpieza temporal, efectos visuales, startup apps.
-2. **Intermediate**: servicios, mantenimiento programado, telemetría.
-3. **Advanced**: tweaks de registro, memoria comprimida, prioridad de I/O.
-4. **Supervised**: debloat profundo, BCD y power scheme de kernel.
+### Tiered OptimizationService
 
-El `OptimizationService` aplica:
-- gating por privilegios,
-- cancelación cooperativa,
-- resultados determinísticos por acción (`ActionResult`).
+`OptimizationService` executes ordered actions per tier with:
 
-## Módulo Free RAM (inspirado en Mem Reduct)
+1. explicit elevation checks,
+2. cooperative cancellation,
+3. deterministic result aggregation (`ActionResult[]`).
 
-Se implementan estrategias de liberación:
+Tiers:
 
-- `ReduceProcessWorkingSetsAsync`  
-  Usa `SetProcessWorkingSetSizeEx` con `-1/-1` para trim de working set.
-- `PurgeStandbyListAsync`  
-  Invoca `NtSetSystemInformation(SystemMemoryListInformation, MemoryPurgeStandbyList)`.
-- `CombinedAggressiveTrimAsync`  
-  Encadena trim + `MemoryEmptyWorkingSets` + `MemoryPurgeLowPriorityStandbyList`.
-- `GetMemorySnapshotAsync`  
-  Lectura de métricas desde `GlobalMemoryStatusEx`.
+- **Simple** → temp cleanup, visual effects tuning, startup scan.
+- **Intermediate** → service orchestration plan, scheduled maintenance profile, telemetry profile.
+- **Advanced** → registry profile, memory compression targeting, I/O priority plan.
+- **Supervised** → deep debloat plan, BCD profile prep, kernel power scheme profile.
 
-`FreeRamPolicyEngine` decide fallback según privilegios, ejecutando en orden seguro.
+> Registration is static in `OptimizationRegistry` (no runtime discovery, no reflection).
 
-## Requisitos de build (Windows)
+---
 
-- Windows 11 (recomendado) o Windows 10 22H2+
-- Visual Studio 2022 17.10+ con workload:
-  - .NET Desktop
-  - Windows App SDK / WinUI
-- SDK de .NET 10 preview (`global.json`)
+## Free RAM section (Mem Reduct-style primitives)
 
-## Comandos
+Implemented through `IFreeRamService` + `FreeRamPolicyEngine`:
+
+- `ReduceProcessWorkingSetsAsync` → `SetProcessWorkingSetSizeEx(-1, -1, ...)`
+- `EmptyWorkingSetsAsync` → `NtSetSystemInformation(SystemMemoryListInformation, MemoryEmptyWorkingSets)`
+- `PurgeStandbyListAsync` → standby purge command
+- `PurgeModifiedPageListAsync` → modified list flush command
+- `PurgeLowPriorityStandbyListAsync` → low-priority standby purge
+- `CombinedAggressiveTrimAsync` → chained high-impact strategy
+
+Policy behavior:
+
+- non-elevated: runs safe per-process working set trim,
+- elevated: adds global memory list commands,
+- elevated + profile privilege: enables modified/low-priority list purges.
+
+---
+
+## Native AOT / Trimming notes
+
+- `PublishAot=true`, `IsAotCompatible=true`, `InvariantGlobalization=true`
+- `LangVersion=preview`, trim analyzers enabled, warnings-as-errors
+- No reflection-based registration paths in optimization/free-ram pipelines
+
+---
+
+## Build and test
 
 ```powershell
-# Restaurar
+# restore
  dotnet restore DarkOptimizer.sln
 
-# Build Debug
+# build
  dotnet build DarkOptimizer.sln -c Debug
 
-# Tests
+# tests
  dotnet test tests/DarkOptimizer.Core.Tests/DarkOptimizer.Core.Tests.csproj
 
-# Publicar AOT (x64)
+# publish Native AOT
  dotnet publish src/DarkOptimizer.App/DarkOptimizer.App.csproj -c Release -r win-x64
 ```
 
-## Caveats técnicos
+---
 
-- Requiere elevación para estrategias avanzadas de RAM y tiers de mayor impacto.
-- Algunas llamadas NT (`NtSetSystemInformation`) pueden variar por build de Windows/políticas locales.
-- Proyecto orientado a Native AOT: evita reflexión dinámica y registro runtime implícito.
+## Technical caveats (max 3)
+
+- NT memory list commands can be policy/build dependent across Windows 10/11 revisions.
+- Advanced and Supervised tiers require elevation; run from an elevated host for full effects.
+- Real-world startup/RAM targets depend on final packaging, R2R/AOT profile, and enabled modules.
