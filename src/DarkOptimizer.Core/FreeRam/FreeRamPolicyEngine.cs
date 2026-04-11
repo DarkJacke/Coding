@@ -9,25 +9,65 @@ public sealed class FreeRamPolicyEngine(IFreeRamService freeRamService, IPrivile
 
     public async ValueTask<IReadOnlyList<FreeRamRunResult>> ExecuteBestStrategyAsync(CancellationToken cancellationToken)
     {
-        var results = new List<FreeRamRunResult>(capacity: 5)
+        var results = new List<FreeRamRunResult>(capacity: 5);
+
+        var workingSet = await ExecuteStrategySafelyAsync(
+            static (service, token) => service.ReduceProcessWorkingSetsAsync(token),
+            "ReduceProcessWorkingSets",
+            cancellationToken).ConfigureAwait(false);
+        results.Add(workingSet);
+
+        if (!workingSet.Succeeded)
         {
-            await _freeRamService.ReduceProcessWorkingSetsAsync(cancellationToken).ConfigureAwait(false)
-        };
+            return results;
+        }
 
         if (!_privilegeProvider.IsElevated)
         {
             return results;
         }
 
-        results.Add(await _freeRamService.EmptyWorkingSetsAsync(cancellationToken).ConfigureAwait(false));
-        results.Add(await _freeRamService.PurgeStandbyListAsync(cancellationToken).ConfigureAwait(false));
+        results.Add(await ExecuteStrategySafelyAsync(
+            static (service, token) => service.EmptyWorkingSetsAsync(token),
+            "EmptyWorkingSets",
+            cancellationToken).ConfigureAwait(false));
+        results.Add(await ExecuteStrategySafelyAsync(
+            static (service, token) => service.PurgeStandbyListAsync(token),
+            "PurgeStandbyList",
+            cancellationToken).ConfigureAwait(false));
 
         if (_privilegeProvider.HasProfileSingleProcessPrivilege)
         {
-            results.Add(await _freeRamService.PurgeModifiedPageListAsync(cancellationToken).ConfigureAwait(false));
-            results.Add(await _freeRamService.PurgeLowPriorityStandbyListAsync(cancellationToken).ConfigureAwait(false));
+            results.Add(await ExecuteStrategySafelyAsync(
+                static (service, token) => service.PurgeModifiedPageListAsync(token),
+                "PurgeModifiedPageList",
+                cancellationToken).ConfigureAwait(false));
+            results.Add(await ExecuteStrategySafelyAsync(
+                static (service, token) => service.PurgeLowPriorityStandbyListAsync(token),
+                "PurgeLowPriorityStandbyList",
+                cancellationToken).ConfigureAwait(false));
         }
 
         return results;
+    }
+
+    private async ValueTask<FreeRamRunResult> ExecuteStrategySafelyAsync(
+        Func<IFreeRamService, CancellationToken, ValueTask<FreeRamRunResult>> strategyAction,
+        string strategy,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await strategyAction(_freeRamService, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MemorySnapshotUnavailableException ex)
+        {
+            return new FreeRamRunResult(
+                strategy,
+                false,
+                0,
+                TimeSpan.Zero,
+                $"No se pudo capturar el estado de memoria: {ex.Message}");
+        }
     }
 }

@@ -1,4 +1,5 @@
 using DarkOptimizer.Core.FreeRam;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -21,7 +22,10 @@ public sealed class FreeRamService : IFreeRamService
 
         if (!MemoryNativeMethods.GlobalMemoryStatusEx(ref status))
         {
-            return ValueTask.FromResult(default(MemorySnapshot));
+            var error = Marshal.GetLastWin32Error();
+            throw new MemorySnapshotUnavailableException(
+                $"No se pudo leer el estado de memoria del sistema (GlobalMemoryStatusEx). Win32 error: {error}.",
+                new Win32Exception(error));
         }
 
         return ValueTask.FromResult(new MemorySnapshot(
