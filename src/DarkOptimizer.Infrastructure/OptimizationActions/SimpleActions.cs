@@ -59,7 +59,7 @@ internal sealed class VisualEffectsAction() : BaseOptimizationAction("simple.vis
         using var key = Registry.CurrentUser.OpenSubKey(ExplorerAdvancedPath, writable: true);
         if (key is null)
         {
-            return ActionExecution.Failure(OptimizationErrorCode.NotSupported, "Explorer advanced registry path is unavailable.");
+            return ActionExecution.Failure(OptimizationErrorCode.Unsupported, "Explorer advanced registry path is unavailable.");
         }
 
         key.SetValue("TaskbarAnimations", 0, RegistryValueKind.DWord);
