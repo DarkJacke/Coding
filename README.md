@@ -69,8 +69,11 @@ DarkOptimizer.sln
 ## 📋 Build Requirements
 
 - Windows 10 22H2+ or Windows 11.
-- Visual Studio 2022 (17.10+) with WinUI/Desktop workloads.
+- Visual Studio 2026 / MSBuild 18.0+ for `.NET 10` SDK feature bands.
 - .NET 10 preview SDK (see `global.json`).
+- Windows App SDK 1.8.x is the current stable servicing line (1.7 is maintenance/ended servicing in March 2026).
+
+> ⚠️ `net10.0` + WinUI 3 + Native AOT remains a high-change toolchain. If your team needs maximum stability for CI and local builds, evaluate an LTS fallback branch on `net8.0-windows10.0.19041.0` while keeping WinUI toolchain versions fully supported.
 
 ---
 
@@ -86,6 +89,30 @@ DarkOptimizer.sln
 # 3) Test
  dotnet test tests/DarkOptimizer.Core.Tests/DarkOptimizer.Core.Tests.csproj -c Release
 ```
+
+---
+
+## 🧪 Build Diagnostics (binlog + XAML targets)
+
+When you need to troubleshoot WinUI/XAML build issues, generate an MSBuild binary log:
+
+```powershell
+dotnet build DarkOptimizer.sln /bl
+```
+
+This writes `msbuild.binlog` in the current working directory. Then:
+
+1. Open `msbuild.binlog` with [MSBuild Structured Log Viewer](https://msbuildlog.com/).
+2. Focus on target/task execution around:
+   - `MarkupCompilePass1`
+   - `MarkupCompilePass2`
+   - `XamlCompiler`
+3. Compare failing node input properties/items with project settings such as:
+   - `<UseWinUI>true</UseWinUI>`
+   - `<UseXamlCompilerExecutable>false</UseXamlCompilerExecutable>`
+   - `<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>`
+
+If failures persist and are tied to preview SDK interactions, test a fallback branch with an LTS TFM that your team's VS + Windows App SDK toolchain fully supports.
 
 ---
 
