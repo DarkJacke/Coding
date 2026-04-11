@@ -110,27 +110,33 @@ public sealed class FreeRamService : IFreeRamService
         var before = await GetMemorySnapshotAsync(cancellationToken).ConfigureAwait(false);
         var sw = Stopwatch.StartNew();
 
-        var value = (int)command;
         var size = (uint)sizeof(int);
+        var buffer = Marshal.AllocHGlobal(sizeof(int));
+        int status;
 
-        unsafe
+        try
         {
-            var status = MemoryNativeMethods.NtSetSystemInformation(
+            Marshal.WriteInt32(buffer, (int)command);
+            status = MemoryNativeMethods.NtSetSystemInformation(
                 MemoryNativeMethods.SYSTEM_INFORMATION_CLASS.SystemMemoryListInformation,
-                (nint)(&value),
+                buffer,
                 size);
-
-            sw.Stop();
-
-            var after = await GetMemorySnapshotAsync(cancellationToken).ConfigureAwait(false);
-            var reclaimed = (long)after.AvailablePhysicalBytes - (long)before.AvailablePhysicalBytes;
-
-            return new FreeRamRunResult(
-                strategy,
-                status == STATUS_SUCCESS,
-                reclaimed,
-                sw.Elapsed,
-                status == STATUS_SUCCESS ? "Command completed." : $"NtSetSystemInformation status: {status}");
         }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+
+        sw.Stop();
+
+        var after = await GetMemorySnapshotAsync(cancellationToken).ConfigureAwait(false);
+        var reclaimed = (long)after.AvailablePhysicalBytes - (long)before.AvailablePhysicalBytes;
+
+        return new FreeRamRunResult(
+            strategy,
+            status == STATUS_SUCCESS,
+            reclaimed,
+            sw.Elapsed,
+            status == STATUS_SUCCESS ? "Command completed." : $"NtSetSystemInformation status: {status}");
     }
 }
