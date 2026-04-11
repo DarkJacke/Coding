@@ -57,19 +57,45 @@ public partial class ShellViewModel : ObservableObject
     [RelayCommand]
     private async Task RefreshMemoryAsync()
     {
-        var snapshot = await _freeRamService.GetMemorySnapshotAsync(CancellationToken.None);
-        SetMemorySummary(snapshot);
+        try
+        {
+            var snapshot = await _freeRamService.GetMemorySnapshotAsync(CancellationToken.None);
+            SetMemorySummary(snapshot);
+        }
+        catch (MemorySnapshotUnavailableException ex)
+        {
+            MemorySummary = "No se pudo leer la RAM del sistema";
+            FreeRamLastResult = ex.Message;
+        }
     }
 
     [RelayCommand]
     private async Task RunFreeRamAsync()
     {
         IsFreeRamBusy = true;
-        var runs = await _freeRamPolicyEngine.ExecuteBestStrategyAsync(CancellationToken.None);
-        var summary = string.Join(" | ", runs.Select(static x => $"{x.Strategy}:{(x.Succeeded ? "OK" : "FAIL")}"));
-        FreeRamLastResult = summary;
-        await RefreshMemoryAsync();
-        IsFreeRamBusy = false;
+        try
+        {
+            var runs = await _freeRamPolicyEngine.ExecuteBestStrategyAsync(CancellationToken.None);
+            var summary = string.Join(" | ", runs.Select(static x =>
+                x.Succeeded
+                    ? $"{x.Strategy}:OK"
+                    : $"{x.Strategy}:FAIL ({x.Message})"));
+
+            FreeRamLastResult = string.IsNullOrWhiteSpace(summary)
+                ? "No se pudo ejecutar ninguna estrategia de liberación."
+                : summary;
+
+            await RefreshMemoryAsync();
+        }
+        catch (MemorySnapshotUnavailableException ex)
+        {
+            FreeRamLastResult = $"Error de snapshot: {ex.Message}";
+            MemorySummary = "No se pudo actualizar la memoria por un error de snapshot";
+        }
+        finally
+        {
+            IsFreeRamBusy = false;
+        }
     }
 
     [RelayCommand]
